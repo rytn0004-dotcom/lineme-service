@@ -32,7 +32,20 @@ function findRecipient(rows,h,role,name){const n=norm(name);return rows.slice(1)
 }
 function findParent(rows,h,student){const s=norm(student),si=h['學生姓名/關聯（可多位）']??h['學生姓名/關聯'];return rows.slice(1).map(r=>({name:r[h['姓名']]||'',role:r[h['身分']]||'',students:split(r[si]||''),userId:r[h['LINE User ID']]||'',bound:norm(r[h['綁定狀態']])==='已綁定',enabled:norm(r[h['通知啟用']]??r[h['啟用']]??'是')!=='否'})).filter(x=>x.role==='家長'&&x.bound&&x.enabled&&String(x.userId).startsWith('U')&&x.students.some(n=>norm(n)===s));}
 async function push(uid,text){const r=await fetch('https://api.line.me/v2/bot/message/push',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${TOKEN}`},body:JSON.stringify({to:uid,messages:[{type:'text',text}]})});return{ok:r.ok,status:r.status,id:r.headers.get('x-line-request-id')||'',body:await r.text()};}
-function sentKeys(rows){if(!rows.length)return new Set();const h=hmap(rows[0]||[]),out=new Set();for(let i=1;i<rows.length;i++){const r=rows[i]||[];if(r[h['狀態']]==='已發送'){const k=h['唯一鍵 Course ID + LINE User ID']!==undefined?h['唯一鍵 Course ID + LINE User ID']:(h['唯一鍵 Course ID + User ID']!==undefined?h['唯一鍵 Course ID + User ID']:h['唯一鍵']); if(k!==undefined&&r[k])out.add(String(r[k]));}}return out;}
+function sentKeys(rows){
+  if(!rows.length)return new Set();
+  const h=hmap(rows[0]||[]);
+  const statusCol=h['狀態'];
+  const keyCol=h['唯一鍵 Course ID + LINE User ID'] ?? h['唯一鍵 Course ID + User ID'] ?? h['唯一鍵'];
+  const out=new Set();
+  if(keyCol===undefined)return out;
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i]||[];
+    if((statusCol===undefined || norm(r[statusCol])==='已發送') && r[keyCol])out.add(String(r[keyCol]));
+  }
+  return out;
+}
+
 function effectiveSendAt(date,time){return String(date||'').slice(0,10)+' '+String(time||'00:00');}
 
 async function main(){
@@ -81,7 +94,7 @@ async function main(){
     let recipients=[];
     if(role==='家長') recipients=findParent(cRows,ch,studentText);
     else if(role==='老師'){
-      const t=findRecipient(cRows,ch,'老師',recipientName) || cRows.slice(1).map(r=>({name:r[ch['姓名']]||'',role:r[ch['身分']]||'',students:split(r[ch['學生姓名/關聯（可多位）']]!==undefined?r[ch['學生姓名/關聯（可多位）']]:r[ch['學生姓名/關聯']]||''),userId:r[ch['LINE User ID']]||'',bound:norm(r[ch['綁定狀態']])==='已綁定',enabled:norm(r[ch['通知啟用']]??r[ch['啟用']]??'是')!=='否'})).find(x=>x.role==='老師'&&x.bound&&x.enabled&&String(x.userId).startsWith('U')&&norm(x.students.join('、')).split('、').some(v=>norm(v)===norm(recipientName)));
+      const t=findRecipient(cRows,ch,'老師',recipientName);
       if(t)recipients=[t];
     } else continue;
 
@@ -99,4 +112,7 @@ async function main(){
   if(logs.length)await appendRows('發送紀錄',logs);
   console.log(`Reminder Scheduler complete: logRows=${logs.length}`);
 }
-main().catch(e=>{console.error('Reminder Scheduler failed:',e);process.exit(1);});
+if (require.main === module) {
+  main().catch(e=>{console.error('Reminder Scheduler failed:',e);process.exit(1);});
+}
+module.exports={main};

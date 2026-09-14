@@ -1,9 +1,21 @@
-# 課程提醒模組（獨立版）
+# LINE Course Reminder v1.1
 
-用途：只讀取「課程提醒、聯絡人、發送紀錄、系統設定」，依「發送日期 + 發送時間 + 確認發送」送出 LINE。
+Web Service 版本：每 60 秒檢查一次 Google Sheets 的「課程提醒」，到達指定日期/時間且「確認發送=是」時，透過 LINE Push Message 發送。
 
-不讀取、也不負責產生：固定課表、調課課程、實際課程。
+本服務只負責課程提醒，不讀取固定課表、調課課程、實際課程；不需要 LINE Webhook，因此不需要 LINE_CHANNEL_SECRET。
 
-Render：使用每分鐘 Cron。請在 Google Sheet 的「系統設定」將「課程提醒啟用」設為「是」後才會發送。
+Required environment variables:
+- LINE_CHANNEL_ACCESS_TOKEN
+- GOOGLE_SHEET_ID
+- GOOGLE_SERVICE_ACCOUNT_JSON
+- TIMEZONE=Asia/Taipei
+- GOOGLE_API_MAX_RETRIES=4
 
-重複防護：提醒ID + LINE User ID。
+Optional:
+- REMINDER_CHECK_INTERVAL_MS=60000
+
+Render:
+- Type: Web Service
+- Build: npm install
+- Start: npm start
+- Health: /health
