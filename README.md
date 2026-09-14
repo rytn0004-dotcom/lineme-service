@@ -1,4 +1,4 @@
-# LINE Course Reminder Web Service v1.4
+# LINE Course Reminder Web Service v1.5
 
 獨立的課程提醒服務。每 60 秒檢查 Google Sheets 的「課程提醒」，到指定發送日期／時間且「確認發送=是」時，以 LINE Push Message 發送。
 
