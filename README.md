@@ -1,21 +1,7 @@
-# LINE Course Reminder v1.1
+# LINE Course Reminder Web Service v1.3
 
-Web Service 版本：每 60 秒檢查一次 Google Sheets 的「課程提醒」，到達指定日期/時間且「確認發送=是」時，透過 LINE Push Message 發送。
+修正重複發送問題：現有「發送紀錄」表的欄位標題位於第 2 列，v1.2 只讀第 1 列，導致每分鐘都無法看到既有的唯一鍵，因此重複發送。
 
-本服務只負責課程提醒，不讀取固定課表、調課課程、實際課程；不需要 LINE Webhook，因此不需要 LINE_CHANNEL_SECRET。
+v1.3 會自動尋找真正的「發送紀錄」標題列，讀取「唯一鍵 Course ID + User ID」等欄位，成功發送後以「提醒ID|LINE User ID」防止後續重複。
 
-Required environment variables:
-- LINE_CHANNEL_ACCESS_TOKEN
-- GOOGLE_SHEET_ID
-- GOOGLE_SERVICE_ACCOUNT_JSON
-- TIMEZONE=Asia/Taipei
-- GOOGLE_API_MAX_RETRIES=4
-
-Optional:
-- REMINDER_CHECK_INTERVAL_MS=60000
-
-Render:
-- Type: Web Service
-- Build: npm install
-- Start: npm start
-- Health: /health
+GOOGLE_API_MAX_RETRIES 只控制 Google Sheets API 遇到 429/5xx 等錯誤時的重試次數，不是這次重複發送的原因。

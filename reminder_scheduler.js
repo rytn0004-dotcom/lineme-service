@@ -34,14 +34,20 @@ function findParent(rows,h,student){const s=norm(student),si=h['學生姓名/關
 async function push(uid,text){const r=await fetch('https://api.line.me/v2/bot/message/push',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${TOKEN}`},body:JSON.stringify({to:uid,messages:[{type:'text',text}]})});return{ok:r.ok,status:r.status,id:r.headers.get('x-line-request-id')||'',body:await r.text()};}
 function sentKeys(rows){
   if(!rows.length)return new Set();
-  const h=hmap(rows[0]||[]);
+  // 發送紀錄的標題在現有 V4 表格中是第 2 列，第一列是合併標題。
+  // 先自動尋找真正的欄位標題列，避免每分鐘重新把同一提醒發一次。
+  const headerRow = rows.findIndex(r => Array.isArray(r) && r.includes('狀態') && (r.includes('唯一鍵 Course ID + LINE User ID') || r.includes('唯一鍵 Course ID + User ID') || r.includes('唯一鍵')));
+  if(headerRow < 0)return new Set();
+  const h=hmap(rows[headerRow]||[]);
   const statusCol=h['狀態'];
   const keyCol=h['唯一鍵 Course ID + LINE User ID'] ?? h['唯一鍵 Course ID + User ID'] ?? h['唯一鍵'];
   const out=new Set();
   if(keyCol===undefined)return out;
-  for(let i=1;i<rows.length;i++){
+  for(let i=headerRow+1;i<rows.length;i++){
     const r=rows[i]||[];
-    if((statusCol===undefined || norm(r[statusCol])==='已發送') && r[keyCol])out.add(String(r[keyCol]));
+    const key=String(r[keyCol]||'').trim();
+    if(!key)continue;
+    if(statusCol===undefined || norm(r[statusCol])==='已發送') out.add(key);
   }
   return out;
 }
