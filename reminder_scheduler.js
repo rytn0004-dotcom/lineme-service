@@ -64,8 +64,13 @@ async function main(){
   const nowMinutes=Number(nowParts.h)*60+Number(nowParts.min);
   const logs=[];
   const sent=sentKeys(lRows);
-  const contacts=rRows && cRows ? cRows : [];
-  const ch=hmap(cRows[rRows?0:0]||[]);
+  const contacts = cRows || [];
+  const contactHeaderRow = contacts.findIndex(r => Array.isArray(r) && r.includes('姓名') && (r.includes('身分') || r.includes('LINE User ID')));
+  const contactRows = contactHeaderRow >= 0 ? contacts.slice(contactHeaderRow) : [];
+  const ch = hmap(contactRows[0] || []);
+  if (ch['姓名'] === undefined || ch['身分'] === undefined || ch['LINE User ID'] === undefined) {
+    throw new Error('聯絡人工作表欄位不正確，找不到「姓名／身分／LINE User ID」。');
+  }
 
   for(let i=rhRow+1;i<rRows.length;i++){
     const row=rRows[i]||[];
@@ -92,9 +97,9 @@ async function main(){
     const studentText=String(row[rrh['學生/學生成員']]||'').trim();
     const explicitUid=''; // LINE User ID is intentionally resolved from 聯絡人.
     let recipients=[];
-    if(role==='家長') recipients=findParent(cRows,ch,studentText);
+    if(role==='家長') recipients=findParent(contactRows,ch,studentText);
     else if(role==='老師'){
-      const t=findRecipient(cRows,ch,'老師',recipientName);
+      const t=findRecipient(contactRows,ch,'老師',recipientName);
       if(t)recipients=[t];
     } else continue;
 
