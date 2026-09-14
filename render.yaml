@@ -4,4 +4,3 @@ services:
     runtime: node
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /health

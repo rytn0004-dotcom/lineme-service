@@ -1,7 +1,22 @@
-# LINE Course Reminder Web Service v1.3
+# LINE Course Reminder Web Service v1.4
 
-修正重複發送問題：現有「發送紀錄」表的欄位標題位於第 2 列，v1.2 只讀第 1 列，導致每分鐘都無法看到既有的唯一鍵，因此重複發送。
+獨立的課程提醒服務。每 60 秒檢查 Google Sheets 的「課程提醒」，到指定發送日期／時間且「確認發送=是」時，以 LINE Push Message 發送。
 
-v1.3 會自動尋找真正的「發送紀錄」標題列，讀取「唯一鍵 Course ID + User ID」等欄位，成功發送後以「提醒ID|LINE User ID」防止後續重複。
+## 本版重點
+- 修正 Google Sheets 日期／時間顯示：發送紀錄以 RAW 寫入，避免出現 46279.6965 這種 Excel/Sheets serial number。
+- `GOOGLE_API_MAX_RETRIES` 只負責 Google API 429/5xx 重試，不會造成重複 LINE 發送。
+- 重複防護：`提醒ID|LINE User ID`。
+- 模板層級：`課程提醒!訊息內容` 有內容時優先，做為該筆個別覆蓋；空白時才使用「訊息模板」中的預設模板。
+- 家長：依學生逐筆發送。
+- 老師：同一老師＋同一日期＋同一上課時間＋同一校區的待發提醒會合併成一則訊息；團班會顯示為「課程(學生A、學生B)」。
 
-GOOGLE_API_MAX_RETRIES 只控制 Google Sheets API 遇到 429/5xx 等錯誤時的重試次數，不是這次重複發送的原因。
+## 可用模板變數
+`{{學生}}` `{{日期}}` `{{星期}}` `{{時間}}` `{{課程}}` `{{校區}}` `{{學生成員}}` `{{老師}}`
+
+## Required environment variables
+- `LINE_CHANNEL_ACCESS_TOKEN`
+- `GOOGLE_SHEET_ID`
+- `GOOGLE_SERVICE_ACCOUNT_JSON`
+- `TIMEZONE` (建議 `Asia/Taipei`)
+- `GOOGLE_API_MAX_RETRIES` (建議 `4`)
+- `REMINDER_CHECK_INTERVAL_MS` (建議 `60000`)
