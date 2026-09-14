@@ -1,0 +1,1 @@
+{"name":"line-course-reminder","version":"1.0.0","private":true,"scripts":{"reminders":"node reminder_scheduler.js"},"dependencies":{"dotenv":"^16.4.5","googleapis":"^144.0.0"}}

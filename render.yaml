@@ -1,0 +1,7 @@
+services:
+  - type: cron
+    name: line-course-reminder-scheduler
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm run reminders
+    schedule: "* * * * *"
