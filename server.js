@@ -55,9 +55,16 @@ function nowParts(){
 }
 function dateKey(v){
   if(v instanceof Date && !isNaN(v)) return new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(v);
+  if(typeof v==='number' && Number.isFinite(v)){
+    const days=Math.floor(v);
+    const dt=new Date(Date.UTC(1899,11,30)+days*86400000);
+    return new Intl.DateTimeFormat('en-CA',{timeZone:'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(dt);
+  }
   const s=String(v??'').trim();
   const m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
-  return m ? `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}` : s.slice(0,10);
+  if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+  const m2=s.match(/^(\d{1,2})[\/](\d{1,2})[\/](\d{4})/);
+  return m2 ? `${m2[3]}-${String(m2[1]).padStart(2,'0')}-${String(m2[2]).padStart(2,'0')}` : s.slice(0,10);
 }
 function timeKey(v){
   if(typeof v==='number'){
@@ -246,12 +253,41 @@ async function main(){
   }
 }
 
+async function todaySnapshot(){
+  const [sRows,rRows,,,]=await batchRead();
+  const cfg=settings(sRows);
+  const rh=findHeaderRow(rRows,['提醒ID','課程日期','發送日期','發送時間','確認發送']);
+  if(rh<0) throw new Error('課程提醒工作表欄位不正確。');
+  const h=hmap(rRows[rh]);
+  const sentRows=await retry('today 發送紀錄',()=>sheets.spreadsheets.values.get({spreadsheetId:SHEET_ID,range:`${qsheet('發送紀錄')}!A:L`,majorDimension:'ROWS'}));
+  const sent=sentKeys(sentRows.data.values||[]);
+  const np=nowParts();
+  const today=`${np.y}-${String(np.m).padStart(2,'0')}-${String(np.d).padStart(2,'0')}`;
+  const rows=[];
+  for(let i=rh+1;i<rRows.length;i++){
+    const r=rRows[i]||[]; const id=String(r[h['提醒ID']]||'').trim(); if(!id) continue;
+    const sendDate=dateKey(r[h['發送日期']]);
+    if(sendDate!==today) continue;
+    const role=String(r[h['身分']]||'').trim(); const recipient=String(r[h['收件人']]||'').trim();
+    const courseDate=dateKey(r[h['課程日期']]); const sendTime=timeKey(r[h['發送時間']]);
+    const confirmed=norm(r[h['確認發送']]??'是')==='是';
+    rows.push({
+      row:i+1,提醒ID:id,發送日期:sendDate,發送時間:sendTime,確認發送:confirmed?'是':'否',
+      課程日期:courseDate,上課時間:timeKey(r[h['上課時間']]),身分:role,收件人:recipient,
+      學生: String(r[h['學生/學生成員']]||'').trim(),課程:String(r[h['課程']]||'').trim(),老師:String(r[h['老師']]||'').trim(),校區:String(r[h['校區']]||'').trim(),
+      訊息內容:String(r[h['訊息內容']]||'').trim()
+    });
+  }
+  return {ok:true,service:'line-course-reminder',version:'1.6.0',timezone:TZ,today,enabled:norm(cfg['課程提醒啟用'])==='是',count:rows.length,rows};
+}
+
 const app=express();
 const PORT=Number(process.env.PORT||10000);
 let running=false,lastRunAt=null,lastRunOk=null,lastRunError=null;
-app.get('/health',(_req,res)=>res.json({ok:true,service:'line-course-reminder',version:'1.5.0',intervalMs:INTERVAL_MS,lastRunAt,lastRunOk,lastRunError,running}));
+app.get('/health',(_req,res)=>res.json({ok:true,service:'line-course-reminder',version:'1.6.0',intervalMs:INTERVAL_MS,lastRunAt,lastRunOk,lastRunError,running}));
+app.get('/today',async(_req,res)=>{ try{ res.json(await todaySnapshot()); } catch(e){ res.status(500).json({ok:false,service:'line-course-reminder',version:'1.6.0',error:e?.message||String(e)}); }});
 const server=app.listen(PORT,()=>{
-  console.log(`line-course-reminder Web Service v1.5.0 listening on ${PORT}`);
+  console.log(`line-course-reminder Web Service v1.6.0 listening on ${PORT}`);
   const tick=async()=>{ if(running){console.log('Reminder check skipped: previous run still in progress.');return;} running=true; lastRunAt=new Date().toISOString(); lastRunError=null; try{await main();lastRunOk=true;}catch(e){lastRunOk=false;lastRunError=e?.message||String(e);console.error('Reminder check failed:',e);}finally{running=false;} };
   setTimeout(()=>void tick(),3000); setInterval(()=>void tick(),INTERVAL_MS);
 });
