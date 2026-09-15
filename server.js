@@ -45,6 +45,13 @@ function findHeaderRow(rows, required){
   return (rows||[]).findIndex(r=>Array.isArray(r) && required.every(k=>r.map(x=>String(x).trim()).includes(k)));
 }
 function settings(rows){ const o={}; for(const r of (rows||[]).slice(2)) if(r[0]) o[String(r[0]).trim()]=String(r[1]??''); return o; }
+function reminderEnabled(cfg){
+  const hasModule = Object.prototype.hasOwnProperty.call(cfg,'課程提醒啟用');
+  const hasMaster = Object.prototype.hasOwnProperty.call(cfg,'自動發送總開關');
+  if (hasMaster && norm(cfg['自動發送總開關']) !== '是') return false;
+  if (hasModule && norm(cfg['課程提醒啟用']) !== '是') return false;
+  return hasMaster || hasModule;
+}
 function nowText(){
   return new Intl.DateTimeFormat('sv-SE',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date()).replace(' ',' ');
 }
@@ -192,7 +199,7 @@ function dueRows(rows,h){
 async function main(){
   const [sRows,rRows,cRows,lRows,tRows]=await batchRead();
   const cfg=settings(sRows);
-  if(norm(cfg['課程提醒啟用'])!=='是'){ console.log('Reminder Scheduler: OFF'); return; }
+  if(!reminderEnabled(cfg)){ console.log('Reminder Scheduler: OFF'); return; }
   const rh=findHeaderRow(rRows,['提醒ID','課程日期','發送日期','發送時間','確認發送']);
   if(rh<0) throw new Error('課程提醒工作表欄位不正確。');
   const h=hmap(rRows[rh]);
@@ -278,14 +285,14 @@ async function todaySnapshot(){
       訊息內容:String(r[h['訊息內容']]||'').trim()
     });
   }
-  return {ok:true,service:'line-course-reminder',version:'1.6.0',timezone:TZ,today,enabled:norm(cfg['課程提醒啟用'])==='是',count:rows.length,rows};
+  return {ok:true,service:'line-course-reminder',version:'1.6.1',timezone:TZ,today,enabled:reminderEnabled(cfg),count:rows.length,rows};
 }
 
 const app=express();
 const PORT=Number(process.env.PORT||10000);
 let running=false,lastRunAt=null,lastRunOk=null,lastRunError=null;
-app.get('/health',(_req,res)=>res.json({ok:true,service:'line-course-reminder',version:'1.6.0',intervalMs:INTERVAL_MS,lastRunAt,lastRunOk,lastRunError,running}));
-app.get('/today',async(_req,res)=>{ try{ res.json(await todaySnapshot()); } catch(e){ res.status(500).json({ok:false,service:'line-course-reminder',version:'1.6.0',error:e?.message||String(e)}); }});
+app.get('/health',(_req,res)=>res.json({ok:true,service:'line-course-reminder',version:'1.6.1',intervalMs:INTERVAL_MS,lastRunAt,lastRunOk,lastRunError,running}));
+app.get('/today',async(_req,res)=>{ try{ res.json(await todaySnapshot()); } catch(e){ res.status(500).json({ok:false,service:'line-course-reminder',version:'1.6.1',error:e?.message||String(e)}); }});
 const server=app.listen(PORT,()=>{
   console.log(`line-course-reminder Web Service v1.6.0 listening on ${PORT}`);
   const tick=async()=>{ if(running){console.log('Reminder check skipped: previous run still in progress.');return;} running=true; lastRunAt=new Date().toISOString(); lastRunError=null; try{await main();lastRunOk=true;}catch(e){lastRunOk=false;lastRunError=e?.message||String(e);console.error('Reminder check failed:',e);}finally{running=false;} };
