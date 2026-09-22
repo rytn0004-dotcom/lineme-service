@@ -53,7 +53,7 @@ function normHeader(v){
     .replace(/[\s\u3000]+/g,'')
     .replace(/[（(][^）)]*[）)]/g,'')
     .replace(/[【\[][^】\]]*[】\]]/g,'')
-    .replace(/[\/／\\]/g,'');
+    .replace(/[／\\]/g,'/');
 }
 function hmap(h){
   const out={};
