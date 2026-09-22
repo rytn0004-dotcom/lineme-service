@@ -1,6 +1,9 @@
 services:
   - type: web
-    name: line-course-reminder
-    runtime: node
+    name: line-course-schedule-manager
+    env: node
+    plan: free
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node server.js
+    healthCheckPath: /health
+    autoDeploy: true
