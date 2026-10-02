@@ -80,16 +80,28 @@ function dueRows(rows,h){const n=nowParts(),today=`${n.y}-${String(n.m).padStart
 async function main(){
   const [sRows,rRows,cRows,lRows,tRows]=await read();
   const cfg=settings(sRows);
+
   if(cfg['自動發送總開關']!=='是'){
     console.log('Reminder Scheduler: OFF');
-    return;
+    return {
+      ok:true,
+      enabled:false,
+      dueCount:0,
+      processed:0,
+      sentCount:0,
+      failedCount:0,
+      unresolvedCount:0,
+      skippedAlreadySent:0,
+      scannedAt:nowText()
+    };
   }
 
   const rh=findHeaderRow(rRows,['提醒ID','課程日期','發送日期','發送時間','確認發送']);
   if(rh<0) throw new Error('課程提醒缺少標準標題列');
   const h=hmap(rRows[rh]);
+
   for(const k of ['訊息內容','身分','收件人','學生/學生成員','課程日期','上課時間','課程','老師','校區']){
-    if(h[k]===undefined) throw new Error(`課程提醒缺少標準欄位：${k}`);
+    if(h[k]===undefined) throw new Error('課程提醒缺少標準欄位：'+k);
   }
 
   const cs=contacts(cRows);
@@ -97,7 +109,14 @@ async function main(){
   const sent=sentKeys(lRows);
   const due=dueRows(rRows.slice(rh+1),h);
 
+  let processed=0;
+  let sentCount=0;
+  let failedCount=0;
+  let unresolvedCount=0;
+  let skippedAlreadySent=0;
+
   for(const item of due){
+    processed++;
     const r=item.row;
     const id=String(r[h['提醒ID']]).trim();
     const role=String(r[h['身分']]||'').trim();
@@ -107,52 +126,135 @@ async function main(){
 
     if(role==='家長'){
       const recipients=resolveParent(cs,student,{merged});
-      if(merged){
-        console.log(`Merged parent reminder: id=${id} members=${extractMemberNames(student).join('、')} matched=${recipients.length}`);
+
+      if(recipients.length===0){
+        unresolvedCount++;
       }
+
+      if(merged){
+        console.log(
+          'Merged parent reminder: id='+id+
+          ' members='+extractMemberNames(student).join('、')+
+          ' matched='+recipients.length
+        );
+      }
+
       for(const rec of recipients){
-        const key=`${id}|${rec.uid}`;
-        if(sent.has(key)) continue;
+        const key=id+'|'+rec.uid;
+
+        if(sent.has(key)){
+          skippedAlreadySent++;
+          continue;
+        }
+
         const text=msg('家長',r,h,templates);
         if(!text) continue;
 
         const res=await push(rec.uid,text);
+
         try{
           await appendLog([
-            nowText(),id,dateKey(r[h['課程日期']]),rec.name||recipient,'家長',
-            rec.uid,text,res.ok?'已發送':'失敗',res.id,res.ok?'':res.body,key
+            nowText(),
+            id,
+            dateKey(r[h['課程日期']]),
+            rec.name||recipient,
+            '家長',
+            rec.uid,
+            text,
+            res.ok?'已發送':'失敗',
+            res.id,
+            res.ok?'':res.body,
+            key
           ]);
         }catch(e){
-          console.error(`LINE 已送出但發送紀錄寫入失敗 key=${key}:`,e?.message||e);
+          console.error(
+            'LINE 已送出但發送紀錄寫入失敗 key='+key+':',
+            e?.message||e
+          );
         }
-        if(res.ok) sent.add(key);
+
+        if(res.ok){
+          sentCount++;
+          sent.add(key);
+        }else{
+          failedCount++;
+        }
       }
+
     }else if(role==='老師'){
-      const rec=resolveTeacher(cs,recipient,String(r[h['老師']]||''));
+      const rec=resolveTeacher(
+        cs,
+        recipient,
+        String(r[h['老師']]||'')
+      );
+
       if(!rec){
-        console.warn(`Teacher resolve FAILED reminder=${id} merged=${merged} recipient=${recipient} teacher=${r[h['老師']]||''}`);
+        unresolvedCount++;
+        console.warn(
+          'Teacher resolve FAILED reminder='+id+
+          ' merged='+merged+
+          ' recipient='+recipient+
+          ' teacher='+(r[h['老師']]||'')
+        );
         continue;
       }
 
-      const key=`${id}|${rec.uid}`;
-      if(sent.has(key)) continue;
+      const key=id+'|'+rec.uid;
+
+      if(sent.has(key)){
+        skippedAlreadySent++;
+        continue;
+      }
+
       const text=msg('老師',r,h,templates);
       if(!text) continue;
 
       const res=await push(rec.uid,text);
+
       try{
         await appendLog([
-          nowText(),id,dateKey(r[h['課程日期']]),rec.name||recipient,'老師',
-          rec.uid,text,res.ok?'已發送':'失敗',res.id,res.ok?'':res.body,key
+          nowText(),
+          id,
+          dateKey(r[h['課程日期']]),
+          rec.name||recipient,
+          '老師',
+          rec.uid,
+          text,
+          res.ok?'已發送':'失敗',
+          res.id,
+          res.ok?'':res.body,
+          key
         ]);
       }catch(e){
-        console.error(`LINE 已送出但發送紀錄寫入失敗 key=${key}:`,e?.message||e);
+        console.error(
+          'LINE 已送出但發送紀錄寫入失敗 key='+key+':',
+          e?.message||e
+        );
       }
-      if(res.ok) sent.add(key);
+
+      if(res.ok){
+        sentCount++;
+        sent.add(key);
+      }else{
+        failedCount++;
+      }
     }
   }
 
-  console.log(`Reminder scan complete due=${due.length}`);
+  const result={
+    ok:failedCount===0 && unresolvedCount===0,
+    enabled:true,
+    dueCount:due.length,
+    processed,
+    sentCount,
+    failedCount,
+    unresolvedCount,
+    skippedAlreadySent,
+    scannedAt:nowText()
+  };
+
+  console.log('Reminder scan complete',result);
+  return result;
 }
 
 async function todayReport(){
