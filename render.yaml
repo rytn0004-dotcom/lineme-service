@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: line-course-schedule-manager
+    name: lineme-service
     env: node
     plan: free
     buildCommand: npm install
