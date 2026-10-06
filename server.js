@@ -62,7 +62,7 @@ app.get('/', (req, res) => {
   res.json({
     ok: true,
     service: 'lineme-service',
-    version: '2.2.0',
+    version: '2.2.1',
     timezone: TZ,
     endpoints: ['/health', '/run', '/report']
   });
@@ -72,7 +72,7 @@ app.get('/health', (req, res) => {
   res.json({
     ok: true,
     service: 'lineme-service',
-    version: '2.2.0',
+    version: '2.2.1',
     timezone: TZ,
     scanIntervalMs: RUN_INTERVAL_MS,
     running: Boolean(runningPromise),
@@ -123,7 +123,7 @@ app.get('/report', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(
-    `lineme-service v2.2.0 listening on port ${PORT}; timezone=${TZ}; scanIntervalMs=${RUN_INTERVAL_MS}`
+    `lineme-service v2.2.1 listening on port ${PORT}; timezone=${TZ}; scanIntervalMs=${RUN_INTERVAL_MS}`
   );
 });
 
