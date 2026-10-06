@@ -323,7 +323,7 @@ async function todayReport(){
       resolveReason=`不支援的身分：${role||'空白'}`;
     }
 
-    const sent=matches.some(x=>sent.has(`${id}|${x.uid}`));
+    const sentAlready=matches.some(x=>sent.has(`${id}|${x.uid}`));
 
     rows.push({
       row:i+1,
@@ -340,7 +340,7 @@ async function todayReport(){
       解析狀態:resolveStatus,
       問題原因:resolveReason,
       matches:matches.map(x=>({姓名:x.name,LINEUserID:x.uid})),
-      sent
+      sent:sentAlready
     });
   }
 
