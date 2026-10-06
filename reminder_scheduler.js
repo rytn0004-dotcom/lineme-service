@@ -285,12 +285,45 @@ async function todayReport(){
     const merged=isMergedReminderId(id);
 
     let matches=[];
+    let resolveStatus='未解析';
+    let resolveReason='';
+
     if(role==='家長'){
+      const members=merged?extractMemberNames(student):[student].filter(Boolean);
       matches=resolveParent(cs,student,{merged});
+
+      if(matches.length){
+        resolveStatus='已解析';
+        resolveReason='找到可發送的已綁定家長';
+      }else if(!members.length){
+        resolveStatus='解析失敗';
+        resolveReason='缺少學生／學生成員資料，無法配對家長';
+      }else{
+        resolveStatus='解析失敗';
+        resolveReason='找不到符合學生／學生成員、已綁定且通知啟用的家長';
+      }
     }else if(role==='老師'){
-      const rec=resolveTeacher(cs,recipient,String(r[h['老師']]||''));
-      if(rec) matches=[rec];
+      const teacherName=String(r[h['老師']]||'').trim();
+      const rec=resolveTeacher(cs,recipient,teacherName);
+
+      if(rec){
+        matches=[rec];
+        resolveStatus='已解析';
+        resolveReason='找到可發送的已綁定老師';
+      }else{
+        resolveStatus='解析失敗';
+        if(!recipient && !teacherName){
+          resolveReason='缺少收件人與老師姓名，無法配對老師';
+        }else{
+          resolveReason='找不到符合收件人／老師姓名、已綁定且通知啟用的老師';
+        }
+      }
+    }else{
+      resolveStatus='解析失敗';
+      resolveReason=`不支援的身分：${role||'空白'}`;
     }
+
+    const sent=matches.some(x=>sent.has(`${id}|${x.uid}`));
 
     rows.push({
       row:i+1,
@@ -299,19 +332,22 @@ async function todayReport(){
       身分:role,
       收件人:recipient,
       學生:student,
+      老師:String(r[h['老師']]||'').trim(),
       成員:merged?extractMemberNames(student):[student].filter(Boolean),
       發送日期:sendDate,
       發送時間:timeKey(r[h['發送時間']]),
       確認發送:norm(r[h['確認發送']]),
+      解析狀態:resolveStatus,
+      問題原因:resolveReason,
       matches:matches.map(x=>({姓名:x.name,LINEUserID:x.uid})),
-      sent:matches.some(x=>sent.has(`${id}|${x.uid}`))
+      sent
     });
   }
 
   return{
     ok:true,
     service:'line-course-reminder',
-    version:'2.2.0',
+    version:'2.2.1',
     timezone:TZ,
     today,
     enabled,
