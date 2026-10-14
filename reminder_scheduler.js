@@ -14,7 +14,7 @@ const q=n=>`'${String(n).replace(/'/g,"''")}'`;
 const norm=v=>String(v??'').trim().replace(/\s+/g,'');
 const split=v=>String(v||'').split(/[、,，\/]/).map(s=>s.trim()).filter(Boolean);
 function isUnavailableSlot(v){const x=String(v??'').trim().replace(/[\s　]/g,'').replace(/^\d{1,2}:?\d{2}/,'').replace(/^[：:、，,]+/,'');return /^(?:無法排課|時段不能排課|不能排課|不可排課|無法安排|休息時段)$/i.test(x)}
-function hasValidReminderStudent(v){const source=String(v??'').trim();if(!source)return false;const pieces=source.split(/[、,，\/\n\r]+/).map(x=>x.trim()).filter(Boolean);return pieces.some(x=>!isUnavailableSlot(x))}
+function hasValidReminderStudent(v){const source=String(v??'').trim();if(!source)return false;const pieces=source.split(/[、,，\/\n\r]+/).map(x=>x.trim()).filter(Boolean);return pieces.length>0&&!pieces.some(isUnavailableSlot)}
 const hmap=h=>Object.fromEntries((h||[]).map((x,i)=>[String(x).trim(),i]));
 function findHeaderRow(rows,required){return (rows||[]).findIndex(r=>Array.isArray(r)&&required.every(k=>r.map(x=>String(x).trim()).includes(k)));}
 function settings(rows){const o={};for(const r of (rows||[]).slice(2))if(r[0])o[String(r[0]).trim()]=String(r[1]??'').trim();return o;}
