@@ -13,6 +13,8 @@ async function retry(label,fn){let last;for(let i=0;i<=RETRIES;i++){try{return a
 const q=n=>`'${String(n).replace(/'/g,"''")}'`;
 const norm=v=>String(v??'').trim().replace(/\s+/g,'');
 const split=v=>String(v||'').split(/[、,，\/]/).map(s=>s.trim()).filter(Boolean);
+function isUnavailableSlot(v){const x=String(v??'').trim().replace(/[\\s　]/g,'').replace(/^\\d{1,2}:?\\d{2}/,'').replace(/^[：:、，,]+/,'');return /^(?:無法排課|時段不能排課|不能排課|不可排課|無法安排|休息時段)$/i.test(x)}
+function hasValidReminderStudent(v){const source=String(v??'').trim();if(!source)return false;const pieces=source.split(/[、,，\/\n\r]+/).map(x=>x.trim()).filter(Boolean);return pieces.some(x=>!isUnavailableSlot(x))}
 const hmap=h=>Object.fromEntries((h||[]).map((x,i)=>[String(x).trim(),i]));
 function findHeaderRow(rows,required){return (rows||[]).findIndex(r=>Array.isArray(r)&&required.every(k=>r.map(x=>String(x).trim()).includes(k)));}
 function settings(rows){const o={};for(const r of (rows||[]).slice(2))if(r[0])o[String(r[0]).trim()]=String(r[1]??'').trim();return o;}
@@ -26,7 +28,7 @@ function sentKeys(rows){const hr=rows.findIndex(r=>Array.isArray(r)&&r.some(x=>S
 function readTemplates(rows){const hr=findHeaderRow(rows,['模板名稱','適用對象','模板內容']);if(hr<0)throw new Error('訊息模板缺少標準欄位');const h=hmap(rows[hr]),out={};for(let i=hr+1;i<rows.length;i++){const r=rows[i]||[];const name=String(r[h['模板名稱']]||'').trim();if(name)out[name]=String(r[h['模板內容']]||'').trim()}return out}
 function weekdayZh(d){const s=dateKey(d);if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return '';const [y,m,dd]=s.split('-').map(Number);return ['日','一','二','三','四','五','六'][new Date(Date.UTC(y,m-1,dd)).getUTCDay()]}
 function msg(role,r,h,templates,members){const custom=String(r[h['訊息內容']]||'').trim();if(custom)return custom;const course=String(r[h['課程']]||'').trim();let t='';if(role==='家長')t=course.includes('團班')?(templates['家長團班']||templates['家長一般']||''):(templates['家長一般']||'');if(role==='老師')t=templates['老師通知']||'';return t.replace(/\{\{\s*([^}]+?)\s*\}\}/g,(_,k)=>String(({學生:String(r[h['學生/學生成員']]||'').trim(),日期:dateKey(r[h['課程日期']]).slice(5).replace(/^0/,'').replace('-','/'),星期:weekdayZh(r[h['課程日期']]),時間:timeKey(r[h['上課時間']]),課程:course,校區:String(r[h['校區']]||'').trim(),學生成員:members??String(r[h['學生/學生成員']]||'').trim(),老師:String(r[h['老師']]||'').trim()})[k.trim()]??''))}
-function contacts(rows){const hr=findHeaderRow(rows,['姓名','身分','LINE User ID']);if(hr<0)throw new Error('聯絡人缺少標準欄位');const h=hmap(rows[hr]);const rel=h['學生姓名/關聯（可多位）'];const out=[];for(let i=hr+1;i<rows.length;i++){const r=rows[i]||[];out.push({name:String(r[h['姓名']]||'').trim(),role:String(r[h['身分']]||'').trim(),relation:split(r[rel]||''),uid:String(r[h['LINE User ID']]||'').trim(),bound:norm(r[h['綁定狀態']])==='已綁定',enabled:norm(r[h['通知啟用']])!=='否'})}return out}
+function contacts(rows){const hr=findHeaderRow(rows,['姓名','身分','LINE User ID']);if(hr<0)throw new Error('聯絡人缺少標準欄位');const h=hmap(rows[hr]);const rel=h['學生姓名/關聯（可多位）']??h['學生姓名/關聯']??h['學生姓名／關聯'];const out=[];for(let i=hr+1;i<rows.length;i++){const r=rows[i]||[];out.push({name:String(r[h['姓名']]||'').trim(),role:String(r[h['身分']]||'').trim(),relation:split(r[rel]||''),uid:String(r[h['LINE User ID']]||'').trim(),bound:norm(r[h['綁定狀態']])==='已綁定',enabled:norm(r[h['通知啟用']])!=='否'})}return out}
 function isMergedReminderId(id){return /^MERGED-/.test(String(id??'').trim())}
 
 function extractMemberNames(value){
@@ -76,7 +78,7 @@ function resolveParent(cs,student,{merged=false}={}){
 }
 function resolveTeacher(cs,recipient,teacherName){const names=[recipient,teacherName].map(norm).filter(Boolean);return cs.find(c=>c.role==='老師'&&c.bound&&c.enabled&&/^U/.test(c.uid)&&names.some(n=>norm(c.name)===n||c.relation.some(x=>norm(x)===n)))}
 async function push(uid,text){const r=await fetch('https://api.line.me/v2/bot/message/push',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${TOKEN}`},body:JSON.stringify({to:uid,messages:[{type:'text',text}]})});return{ok:r.ok,status:r.status,id:r.headers.get('x-line-request-id')||'',body:await r.text()}}
-function dueRows(rows,h){const n=nowParts(),today=`${n.y}-${String(n.m).padStart(2,'0')}-${String(n.d).padStart(2,'0')}`,nowMin=n.h*60+n.min,out=[];for(let i=0;i<rows.length;i++){const r=rows[i]||[];if(!r[h['提醒ID']]||norm(r[h['確認發送']])!=='是')continue;const d=dateKey(r[h['發送日期']]),t=timeKey(r[h['發送時間']]);if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!t)continue;const [hh,mm]=t.split(':').map(Number);if(d<today||(d===today&&nowMin>=hh*60+mm))out.push({row:r,index:i})}return out}
+function dueRows(rows,h){const n=nowParts(),today=`${n.y}-${String(n.m).padStart(2,'0')}-${String(n.d).padStart(2,'0')}`,nowMin=n.h*60+n.min,out=[];for(let i=0;i<rows.length;i++){const r=rows[i]||[];if(!r[h['提醒ID']]||norm(r[h['確認發送']])!=='是')continue;const student=String(r[h['學生/學生成員']]||'').trim();if(!hasValidReminderStudent(student))continue;const d=dateKey(r[h['發送日期']]),t=timeKey(r[h['發送時間']]);if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!t)continue;const [hh,mm]=t.split(':').map(Number);if(d<today||(d===today&&nowMin>=hh*60+mm))out.push({row:r,index:i})}return out}
 async function main(){
   const [sRows,rRows,cRows,lRows,tRows]=await read();
   const cfg=settings(sRows);
