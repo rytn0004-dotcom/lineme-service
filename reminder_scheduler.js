@@ -64,7 +64,36 @@ function sentKeys(rows){const hr=rows.findIndex(r=>Array.isArray(r)&&r.some(x=>S
 function readTemplates(rows){const hr=findHeaderRow(rows,['模板名稱','適用對象','模板內容']);if(hr<0)throw new Error('訊息模板缺少標準欄位');const h=hmap(rows[hr]),out={};for(let i=hr+1;i<rows.length;i++){const r=rows[i]||[];const name=String(r[h['模板名稱']]||'').trim();if(name)out[name]=String(r[h['模板內容']]||'').trim()}return out}
 function weekdayZh(d){const s=dateKey(d);if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return '';const [y,m,dd]=s.split('-').map(Number);return ['日','一','二','三','四','五','六'][new Date(Date.UTC(y,m-1,dd)).getUTCDay()]}
 function msg(role,r,h,templates,members){const custom=String(r[h['訊息內容']]||'').trim();if(custom)return custom;const course=String(r[h['課程']]||'').trim();let t='';if(role==='家長')t=course.includes('團班')?(templates['家長團班']||templates['家長一般']||''):(templates['家長一般']||'');if(role==='老師')t=templates['老師通知']||'';return t.replace(/\{\{\s*([^}]+?)\s*\}\}/g,(_,k)=>String(({學生:String(r[h['學生/學生成員']]||'').trim(),日期:dateKey(r[h['課程日期']]).slice(5).replace(/^0/,'').replace('-','/'),星期:weekdayZh(r[h['課程日期']]),時間:timeKey(r[h['上課時間']]),課程:course,校區:String(r[h['校區']]||'').trim(),學生成員:members??String(r[h['學生/學生成員']]||'').trim(),老師:String(r[h['老師']]||'').trim()})[k.trim()]??''))}
-function contacts(rows){const hr=findHeaderRow(rows,['姓名','身分','LINE User ID']);if(hr<0)throw new Error('聯絡人缺少標準欄位');const h=hmap(rows[hr]);const rel=h['學生姓名/關聯（可多位）']??h['學生姓名/關聯']??h['學生姓名／關聯'];const out=[];for(let i=hr+1;i<rows.length;i++){const r=rows[i]||[];out.push({name:String(r[h['姓名']]||'').trim(),role:String(r[h['身分']]||'').trim(),relation:split(r[rel]||''),uid:String(r[h['LINE User ID']]||'').trim(),bound:norm(r[h['綁定狀態']])==='已綁定',enabled:norm(r[h['通知啟用']])!=='否'})}return out}
+function contacts(rows){
+  const required=['姓名','身分','LINE User ID'];
+  const hr=findHeaderRow(rows,required);
+  if(hr<0)throw new Error('聯絡人缺少標準欄位：姓名、身分、LINE User ID');
+  const h=hmap(rows[hr]);
+  const relationName=[
+    '學生姓名/關聯（可多位）',
+    '學生姓名／關聯（可多位）',
+    '學生姓名/關聯',
+    '學生姓名／關聯',
+    '學生姓名關聯'
+  ].find(name=>h[name]!==undefined);
+  if(!relationName)throw new Error('聯絡人缺少學生關聯欄位（學生姓名/關聯）；請先確認欄位名稱。');
+  for(const name of ['綁定狀態','通知啟用']){
+    if(h[name]===undefined)throw new Error('聯絡人缺少必要欄位：'+name);
+  }
+  const out=[];
+  for(let i=hr+1;i<rows.length;i++){
+    const r=rows[i]||[];
+    out.push({
+      name:String(r[h['姓名']]||'').trim(),
+      role:String(r[h['身分']]||'').trim(),
+      relation:split(r[h[relationName]]||''),
+      uid:String(r[h['LINE User ID']]||'').trim(),
+      bound:norm(r[h['綁定狀態']])==='已綁定',
+      enabled:norm(r[h['通知啟用']])==='是'
+    });
+  }
+  return out;
+}
 function isMergedReminderId(id){return /^MERGED-/.test(String(id??'').trim())}
 
 function extractMemberNames(value){
