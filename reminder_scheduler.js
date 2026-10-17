@@ -51,7 +51,7 @@ function dateKey(v){
       return isValidDateKey(key)?key:'';
     }
   }
-  const m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:$|\s)/);
+  const m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:$|[T\s])/);
   if(!m)return '';
   const key=`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
   return isValidDateKey(key)?key:'';
