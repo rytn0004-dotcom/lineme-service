@@ -17,10 +17,46 @@ function isUnavailableSlot(v){const x=String(v??'').trim().replace(/[\s　]/g,''
 function hasValidReminderStudent(v){const source=String(v??'').trim();if(!source)return false;const pieces=source.split(/[、,，\/\n\r]+/).map(x=>x.trim()).filter(Boolean);return pieces.length>0&&!pieces.some(isUnavailableSlot)}
 const hmap=h=>Object.fromEntries((h||[]).map((x,i)=>[String(x).trim(),i]));
 function findHeaderRow(rows,required){return (rows||[]).findIndex(r=>Array.isArray(r)&&required.every(k=>r.map(x=>String(x).trim()).includes(k)));}
-function settings(rows){const o={};for(const r of (rows||[]).slice(2))if(r[0])o[String(r[0]).trim()]=String(r[1]??'').trim();return o;}
+function settings(rows){
+  const source=rows||[];
+  const header=findHeaderRow(source,['設定項目','目前值']);
+  const start=header>=0?header+1:0;
+  const out={};
+  for(let i=start;i<source.length;i++){
+    const row=source[i]||[];
+    const key=String(row[0]??'').trim();
+    if(!key || key==='設定項目') continue;
+    out[key]=String(row[1]??'').trim();
+  }
+  return out;
+}
+
 function nowParts(){const p=new Intl.DateTimeFormat('en-US',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(new Date());const g=t=>p.find(x=>x.type===t)?.value;return{y:+g('year'),m:+g('month'),d:+g('day'),wd:g('weekday'),h:+g('hour'),min:+g('minute'),sec:+g('second')}}
 function nowText(){const n=nowParts();return `${String(n.y).padStart(4,'0')}-${String(n.m).padStart(2,'0')}-${String(n.d).padStart(2,'0')} ${String(n.h).padStart(2,'0')}:${String(n.min).padStart(2,'0')}:${String(n.sec).padStart(2,'0')}`}
-function dateKey(v){const s=String(v??'').trim();if(/^\d+(?:\.\d+)?$/.test(s)){const serial=Number(s);if(serial>30000){const ms=Math.round((serial-25569)*86400000);const d=new Date(ms);return new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d)}}const m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);return m?`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`:s.slice(0,10)}
+function isValidDateKey(value){
+  const m=String(value??'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return false;
+  const y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]);
+  const dt=new Date(Date.UTC(y,mo-1,d));
+  return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo-1&&dt.getUTCDate()===d;
+}
+function dateKey(v){
+  const s=String(v??'').trim();
+  if(/^\d+(?:\.\d+)?$/.test(s)){
+    const serial=Number(s);
+    if(serial>30000){
+      const ms=Math.round((serial-25569)*86400000);
+      const d=new Date(ms);
+      const key=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+      return isValidDateKey(key)?key:'';
+    }
+  }
+  const m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:$|\s)/);
+  if(!m)return '';
+  const key=`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+  return isValidDateKey(key)?key:'';
+}
+
 function timeKey(v){if(typeof v==='number'||/^\d+(?:\.\d+)?$/.test(String(v??'').trim())){const n=Number(v);if(Number.isFinite(n)&&n>0&&n<1.5){const mins=Math.round((n%1)*1440);return `${String(Math.floor(mins/60)%24).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`}}const s=String(v??'').trim().replace(/上午|下午/g,' ');const m=s.match(/(\d{1,2}):([0-5]\d)/);if(m){let h=+m[1];if(/PM|下午/i.test(s)&&h<12)h+=12;if(/AM|上午/i.test(s)&&h===12)h=0;return `${String(h).padStart(2,'0')}:${m[2]}`}return ''}
 async function read(){return retry('batchGet',async()=>{const ranges=[`${q('系統設定')}!A:D`,`${q('課程提醒')}!A:M`,`${q('聯絡人')}!A:I`,`${q('發送紀錄')}!A:K`,`${q('訊息模板')}!A:D`];const r=await sheets.spreadsheets.values.batchGet({spreadsheetId:SHEET_ID,ranges,majorDimension:'ROWS'});return (r.data.valueRanges||[]).map(x=>x.values||[])})}
 async function appendLog(row){return retry('append 發送紀錄',()=>sheets.spreadsheets.values.append({spreadsheetId:SHEET_ID,range:`${q('發送紀錄')}!A:K`,valueInputOption:'RAW',insertDataOption:'INSERT_ROWS',requestBody:{values:[row]}}))}
@@ -78,7 +114,24 @@ function resolveParent(cs,student,{merged=false}={}){
 }
 function resolveTeacher(cs,recipient,teacherName){const names=[recipient,teacherName].map(norm).filter(Boolean);return cs.find(c=>c.role==='老師'&&c.bound&&c.enabled&&/^U/.test(c.uid)&&names.some(n=>norm(c.name)===n||c.relation.some(x=>norm(x)===n)))}
 async function push(uid,text){const r=await fetch('https://api.line.me/v2/bot/message/push',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${TOKEN}`},body:JSON.stringify({to:uid,messages:[{type:'text',text}]})});return{ok:r.ok,status:r.status,id:r.headers.get('x-line-request-id')||'',body:await r.text()}}
-function dueRows(rows,h){const n=nowParts(),today=`${n.y}-${String(n.m).padStart(2,'0')}-${String(n.d).padStart(2,'0')}`,nowMin=n.h*60+n.min,out=[];for(let i=0;i<rows.length;i++){const r=rows[i]||[];if(!r[h['提醒ID']]||norm(r[h['確認發送']])!=='是')continue;const student=String(r[h['學生/學生成員']]||'').trim();if(!hasValidReminderStudent(student))continue;const d=dateKey(r[h['發送日期']]),t=timeKey(r[h['發送時間']]);if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!t)continue;const [hh,mm]=t.split(':').map(Number);if(d<today||(d===today&&nowMin>=hh*60+mm))out.push({row:r,index:i})}return out}
+function dueRows(rows,h){
+  const n=nowParts();
+  const today=`${n.y}-${String(n.m).padStart(2,'0')}-${String(n.d).padStart(2,'0')}`;
+  const nowMin=n.h*60+n.min,out=[];
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i]||[];
+    if(!r[h['提醒ID']]||norm(r[h['確認發送']])!=='是')continue;
+    const student=String(r[h['學生/學生成員']]||'').trim();
+    if(!hasValidReminderStudent(student))continue;
+    const d=dateKey(r[h['發送日期']]),t=timeKey(r[h['發送時間']]);
+    if(!isValidDateKey(d)||!t)continue;
+    const [hh,mm]=t.split(':').map(Number);
+    if(!Number.isInteger(hh)||!Number.isInteger(mm)||hh<0||hh>23||mm<0||mm>59)continue;
+    if(d<today||(d===today&&nowMin>=hh*60+mm))out.push({row:r,index:i});
+  }
+  return out;
+}
+
 async function main(){
   const [sRows,rRows,cRows,lRows,tRows]=await read();
   const cfg=settings(sRows);
