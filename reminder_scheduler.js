@@ -89,7 +89,7 @@ function contacts(rows){
       relation:split(r[h[relationName]]||''),
       uid:String(r[h['LINE User ID']]||'').trim(),
       bound:norm(r[h['綁定狀態']])==='已綁定',
-      enabled:norm(r[h['通知啟用']])==='是'
+      enabled:['是','yes','true','1','啟用'].includes(norm(r[h['通知啟用']]).toLowerCase())
     });
   }
   return out;
